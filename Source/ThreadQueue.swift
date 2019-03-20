@@ -13,12 +13,9 @@
 import Foundation
 
 /// FIFO. First-In-First-Out guaranteed on exactly same thread.
-class Thread: NSThread {
-    
-    typealias Block = () -> ()
-
+public class ThreadQueue: Foundation.Thread {
     private let condition = NSCondition()
-    private(set) var queue = [Block]()
+    private(set) var queue = [() -> ()]()
     private(set) var paused: Bool = false
 
     /**
@@ -27,7 +24,7 @@ class Thread: NSThread {
         - start: Boolean whether thread should start immediately. Defaults to true.
         - queue: Initial array of blocks to add to enqueue. Executed in order of objects in array.
     */
-    init(start: Bool = true, queue: [Block]? = nil) {
+    init(start: Bool = true, queue: [() -> ()]? = nil) {
         super.init()
         // Add blocks initially to queue
         if let queue = queue {
@@ -46,7 +43,7 @@ class Thread: NSThread {
      You should never invoke this method directly. You should always start your thread by invoking the start method.
      Shouldn't invoke `super`.
      */
-    final override func main() {
+    final override public func main() {
 
         // Infinite loops until thread is cancelled
         while true {
@@ -56,14 +53,14 @@ class Thread: NSThread {
 
             // 2. Test a boolean predicate. (This predicate is a boolean flag or other variable in your code that indicates whether it is safe to perform the task protected by the condition.)
             // If no blocks (or paused) and not cancelled
-            while (queue.count == 0 || paused) && !cancelled  {
+            while (queue.count == 0 || paused) && !isCancelled  {
                 // 3. If the boolean predicate is false, call the condition object’s wait or waitUntilDate: method to block the thread. Upon returning from these methods, go to step 2 to retest your boolean predicate. (Continue waiting and retesting the predicate until it is true.)
                 condition.wait()
             }
             // 4. If the boolean predicate is true, perform the task.
 
             // If your thread supports cancellation, it should check this property periodically and exit if it ever returns true.
-            if (cancelled) {
+            if (isCancelled) {
                 condition.unlock()
                 return
             }
@@ -84,7 +81,7 @@ class Thread: NSThread {
      - parameters:
         - block: The code to run.
      */
-    final func enqueue(block: Block) {
+    final public func enqueue(_ block: @escaping () -> ()) {
         // Lock to ensure first-in gets added to array first
         condition.lock()
         // Add to queue
@@ -94,6 +91,21 @@ class Thread: NSThread {
         // Release lock
         condition.unlock()
     }
+    
+    final public func async(_ block: @escaping () -> ()) {
+        enqueue(block)
+    }
+    
+    final public func sync(_ block: @escaping () -> ()) {
+        let semaphore = DispatchSemaphore(value: 0)
+        
+        enqueue {
+            block()
+            semaphore.signal()
+        }
+        
+        semaphore.wait()
+    }
 
     /**
      Start the thread.
@@ -101,7 +113,7 @@ class Thread: NSThread {
      - SeeAlso: .start()
      - SeeAlso: .pause()
      */
-    final override func start() {
+    final override public func start() {
         // Lock to let all mutations to behaviour obey FIFO
         condition.lock()
         // Unpause. Might be in pause state
@@ -119,7 +131,7 @@ class Thread: NSThread {
      - SeeAlso: .start()
      - SeeAlso: .pause()
      */
-    final override func cancel() {
+    final override public func cancel() {
         // Lock to let all mutations to behaviour obey FIFO
         condition.lock()
         // Cancel NSThread
@@ -136,7 +148,7 @@ class Thread: NSThread {
      - SeeAlso: .start()
      - SeeAlso: .cancel()
      */
-    final func pause() {
+    final public func pause() {
         // Lock to let all mutations to behaviour obey FIFO
         condition.lock()
         //
@@ -153,7 +165,7 @@ class Thread: NSThread {
      - SeeAlso: .start()
      - SeeAlso: .cancel()
      */
-    final func resume() {
+    final public func resume() {
         // Lock to let all mutations to behaviour obey FIFO
         condition.lock()
         //
@@ -167,10 +179,10 @@ class Thread: NSThread {
     /**
      Empty the queue for any blocks that hasn't been run yet
      - SeeAlso:
-        - .enqueue(block: Block)
+        - .enqueue(block: () -> ())
         - .cancel()
      */
-    final func emptyQueue() {
+    final public func emptyQueue() {
         // Lock to let all mutations to behaviour obey FIFO
         condition.lock()
         // Remove any blocks from the queue

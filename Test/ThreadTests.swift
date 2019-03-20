@@ -28,20 +28,39 @@ class ThreadTests: XCTestCase {
     }
     
     func testEnqueueSingle() {
-        let expectation = expectationWithDescription("First")
+        let ex = expectation(description: "First")
 
-        let thread = Thread()
+        let thread = ThreadQueue()
         thread.enqueue {
-            expectation.fulfill()
+            ex.fulfill()
         }
-        waitForExpectationsWithTimeout(1, handler: nil)
+        waitForExpectations(timeout: 1, handler: nil)
+    }
+    
+    func testSync() {
+        let ex = expectation(description: "First")
+        
+        let thread = ThreadQueue()
+        var ran = false
+        
+        thread.sync {
+            Thread.sleep(forTimeInterval: 0.1)
+            ex.fulfill()
+            ran = true
+        }
+        
+        if (!ran) {
+            XCTFail("didn't execute synchronously")
+        }
+        
+        waitForExpectations(timeout: 0.5, handler: nil)
     }
 
     func testEnqueueMultiple() {
-        let expectation1 = expectationWithDescription("First")
-        let expectation2 = expectationWithDescription("Second")
+        let expectation1 = expectation(description: "First")
+        let expectation2 = expectation(description: "Second")
 
-        let thread = Thread()
+        let thread = ThreadQueue()
         var visitedFirst = false
         thread.enqueue {
             expectation1.fulfill()
@@ -51,14 +70,14 @@ class ThreadTests: XCTestCase {
             expectation2.fulfill()
             XCTAssert(visitedFirst, "Didn't run first before this secondary block")
         }
-        waitForExpectationsWithTimeout(1, handler: nil)
+        waitForExpectations(timeout: 1, handler: nil)
     }
 
     func testCancel() {
-        let expectation1 = expectationWithDescription("First")
-        let expectationWait = expectationWithDescription("Wait")
+        let expectation1 = expectation(description: "First")
+        let expectationWait = expectation(description: "Wait")
 
-        let thread = Thread()
+        let thread = ThreadQueue()
         thread.enqueue {
             thread.cancel()
             expectation1.fulfill()
@@ -67,46 +86,46 @@ class ThreadTests: XCTestCase {
             XCTFail("This block is enqueued after first block, so shouldn't be run")
         }
 
-        asyncAfter(0.1) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             expectationWait.fulfill()
         }
 
         // Wait
-        waitForExpectationsWithTimeout(1, handler: nil)
+        waitForExpectations(timeout: 1, handler: nil)
     }
 
     func testEmptyQueue() {
-        let expectation1 = expectationWithDescription("First")
-        let expectationWait = expectationWithDescription("Wait")
+        let expectation1 = expectation(description: "First")
+        let expectationWait = expectation(description: "Wait")
 
-        let thread = Thread()
+        let thread = ThreadQueue()
         thread.enqueue {
             expectation1.fulfill()
-            NSThread.sleepForTimeInterval(0.1)
+            Thread.sleep(forTimeInterval: 0.1)
         }
         thread.enqueue {
             XCTFail("This block is enqueued after first block, so shouldn't be run")
         }
-        dispatch_async(dispatch_get_main_queue()) {
+        DispatchQueue.main.async {
             XCTAssertEqual(thread.queue.count, 1)
             thread.emptyQueue()
             XCTAssertEqual(thread.queue.count, 0)
         }
 
-        asyncAfter(0.2) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             expectationWait.fulfill()
         }
 
         // Wait
-        waitForExpectationsWithTimeout(1, handler: nil)
+        waitForExpectations(timeout: 1, handler: nil)
     }
 
     func testPause() {
-        let expectation1 = expectationWithDescription("First")
-        let expectation2 = expectationWithDescription("Second")
-        let expectationWait = expectationWithDescription("Wait")
+        let expectation1 = expectation(description: "First")
+        let expectation2 = expectation(description: "Second")
+        let expectationWait = expectation(description: "Wait")
 
-        let thread = Thread()
+        let thread = ThreadQueue()
         var paused: Bool = false
         var resumed: Bool = false
         thread.enqueue {
@@ -121,7 +140,7 @@ class ThreadTests: XCTestCase {
             expectation2.fulfill()
         }
 
-        asyncAfter(0.1) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             expectationWait.fulfill()
             resumed = true
             thread.resume()
@@ -129,25 +148,12 @@ class ThreadTests: XCTestCase {
         }
 
         // Wait
-        waitForExpectationsWithTimeout(1, handler: nil)
+        waitForExpectations(timeout: 1, handler: nil)
     }
 
     func testInitialQueue() {
-        let thread = Thread(start: false, queue: [{}, {}, {}])
+        let thread = ThreadQueue(start: false, queue: [{}, {}, {}])
         XCTAssertEqual(thread.queue.count, 3, "Thread initialized with 3 blocks.")
     }
 }
 
-
-extension ThreadTests {
-
-    private func asyncAfter(seconds: Double, queue: dispatch_queue_t = dispatch_get_main_queue(), block: dispatch_block_t) {
-        let nanoSeconds = Int64(seconds * Double(NSEC_PER_SEC))
-        let time = dispatch_time(DISPATCH_TIME_NOW, nanoSeconds)
-        at(time, block: block, queue: queue)
-    }
-    private func at(time: dispatch_time_t, block: dispatch_block_t, queue: dispatch_queue_t) {
-        // See Async.async() for comments
-        dispatch_after(time, queue, block)
-    }
-}
