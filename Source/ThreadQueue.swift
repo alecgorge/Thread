@@ -24,7 +24,7 @@ public class ThreadQueue: Foundation.Thread {
         - start: Boolean whether thread should start immediately. Defaults to true.
         - queue: Initial array of blocks to add to enqueue. Executed in order of objects in array.
     */
-    init(start: Bool = true, queue: [() -> ()]? = nil) {
+    public init(start: Bool = true, queue: [() -> ()]? = nil) {
         super.init()
         // Add blocks initially to queue
         if let queue = queue {
