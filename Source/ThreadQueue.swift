@@ -96,17 +96,15 @@ public class ThreadQueue: Foundation.Thread {
         enqueue(block)
     }
     
-    final public func sync(_ block: () -> ()) {
-        withoutActuallyEscaping(block) { escapableBlock in
-            let semaphore = DispatchSemaphore(value: 0)
-            
-            enqueue {
-                escapableBlock()
-                semaphore.signal()
-            }
-            
-            semaphore.wait()
+    final public func sync(_ block: @escaping () -> ()) {
+        let semaphore = DispatchSemaphore(value: 0)
+        
+        enqueue {
+            block()
+            semaphore.signal()
         }
+        
+        semaphore.wait()
     }
 
     /**
